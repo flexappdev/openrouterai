@@ -69,7 +69,19 @@ export const SEED_KEYS: ApiKey[] = [
   { id: "k3", name: "scroller-apps", key: "sk-or-v1-d40c…b7f3", created: "2026-03-08", lastUsed: "2026-06-09", limit: null, spendMtd: 41.07, disabled: false },
 ];
 
-export const LOGS = Array.from({ length: 40 }, (_, i) => {
+export type LogRow = {
+  id: string;
+  model: string;
+  app: string;
+  time: string;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+  latency: number;
+  status: "200" | "error";
+};
+
+export const LOGS: LogRow[] = Array.from({ length: 40 }, (_, i) => {
   const m = MODELS[i % MODELS.length];
   const inTok = 800 + ((i * 977) % 12000);
   const outTok = 200 + ((i * 613) % 4000);

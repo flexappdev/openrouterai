@@ -1,27 +1,71 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { LOGS, fmtMoney } from "@/lib/data";
+import { useEffect, useMemo, useState } from "react";
+import { LOGS, fmtMoney, type LogRow } from "@/lib/data";
+
+type LiveLog = {
+  ts?: string;
+  key_hash: string;
+  model: string;
+  status: string;
+  latency_ms: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+};
+
+function liveToRow(l: LiveLog, i: number): LogRow {
+  return {
+    id: `live-${i}`,
+    time: l.ts ?? new Date().toISOString(),
+    model: l.model,
+    app: l.key_hash,
+    tokensIn: l.prompt_tokens ?? 0,
+    tokensOut: l.completion_tokens ?? 0,
+    cost: 0,
+    latency: (l.latency_ms ?? 0) / 1000,
+    status: l.status === "200" ? "200" : "error",
+  };
+}
 
 export default function LogsPage() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("All");
+  const [liveRows, setLiveRows] = useState<LogRow[] | null>(null);
+
+  useEffect(() => {
+    fetch("/api/logs")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d) => {
+        const live = (d?.data ?? []) as LiveLog[];
+        if (live.length > 0) setLiveRows(live.map(liveToRow));
+      })
+      .catch(() => {
+        // soft-fail — fall through to seed
+      });
+  }, []);
+
+  const source = liveRows ?? LOGS;
 
   const rows = useMemo(
     () =>
-      LOGS.filter(
+      source.filter(
         (l) =>
-          (status === "All" || (status === "Errors" ? l.status === "error" : l.status === "200")) &&
-          (l.model.includes(q.toLowerCase()) || l.id.includes(q.toLowerCase()) || l.app.includes(q.toLowerCase()))
+          (status === "All" ||
+            (status === "Errors" ? l.status === "error" : l.status === "200")) &&
+          (l.model.toLowerCase().includes(q.toLowerCase()) ||
+            l.id.toLowerCase().includes(q.toLowerCase()) ||
+            l.app.toLowerCase().includes(q.toLowerCase()))
       ),
-    [q, status]
+    [q, status, source]
   );
 
   return (
     <>
       <h1 className="font-display" style={{ fontSize: 34, margin: "0 0 6px" }}>Logs</h1>
       <p style={{ color: "var(--muted-foreground)", margin: "0 0 24px" }}>
-        Per-request detail for the current day. Retention follows your privacy settings.
+        {liveRows
+          ? "Live request logs from MongoDB. Retention follows your privacy settings."
+          : "Per-request detail for the current day. Showing seed data — Mongo unreachable or empty."}
       </p>
 
       <div style={{ display: "flex", gap: 12, marginBottom: 18 }}>
@@ -32,7 +76,12 @@ export default function LogsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <select className="input" style={{ width: 130 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <select
+          className="input"
+          style={{ width: 130 }}
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
           <option>All</option>
           <option>Success</option>
           <option>Errors</option>
@@ -70,7 +119,7 @@ export default function LogsPage() {
               alignItems: "center",
             }}
           >
-            <span style={{ color: "var(--muted-foreground)" }}>{l.time.slice(11)}</span>
+            <span style={{ color: "var(--muted-foreground)" }}>{l.time.slice(11, 19)}</span>
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.model}</span>
             <span style={{ color: "var(--muted-foreground)" }}>{l.app}</span>
             <span style={{ textAlign: "right" }}>{l.tokensIn.toLocaleString()}</span>

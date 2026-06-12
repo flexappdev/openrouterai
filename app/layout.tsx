@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import Header from "@/components/Header";
+import Analytics from "@/components/Analytics";
 
 export const metadata: Metadata = {
   title: "OpenRouterai — One API for every model",
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           {children}
         </AuthProvider>
+        <Analytics />
       </body>
     </html>
   );
