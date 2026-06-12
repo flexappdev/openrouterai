@@ -86,9 +86,12 @@ Source values from `~/context-2026/agents/.env` (the central agents env file).
 | `ADMIN_EMAIL` | console | Allowlisted email (default `mat@matsiems.com`) |
 | `OPENROUTER_API_KEY` | proxy | Server-side OpenRouter key |
 | `OPENROUTER_MODEL` | proxy | Default model slug |
-| `MONGODB_URI` | logs | Atlas connection string |
-| `MONGODB_DB` | logs | Defaults to `OPENROUTERAI` |
-| `NEXT_PUBLIC_GA_ID` | optional | GA4 measurement id (leave empty until ready) |
+| `MONGODB_URI` | logs + keys | Atlas connection string |
+| `MONGODB_DB` | logs + keys | Defaults to `OPENROUTERAI` |
+| `NEXT_PUBLIC_GA_ID` | optional | GA4 measurement id (e.g. `G-GTVT9WMTZW`) |
+| `STRIPE_SECRET_KEY` | billing | `sk_live_...` or `sk_test_...` — enables `/api/billing/checkout` |
+| `STRIPE_WEBHOOK_SECRET` | billing | `whsec_...` — verifies signed events on `/api/billing/webhook` |
+| `NEXT_PUBLIC_APP_URL` | optional | Used as origin for OpenRouter attribution + Stripe redirects |
 
 Sync to Vercel: `vercel env add <KEY> production` (or `/abc-vercel`).
 
@@ -115,14 +118,35 @@ vercel --prod              # promote
 vercel env ls production   # inspect env
 ```
 
-## Not yet wired
+## API surface (additions in v1.1)
 
-- **GA4** is code-ready but `NEXT_PUBLIC_GA_ID` is blank — activate with
-  `/abc-ga sync openrouterai G-XXXX` when a measurement id exists.
-- **Stripe** for `/settings/credits` — page stays mock until billing is in scope.
-- **Per-key spend tracking** — keys live in client state until Mongo-backed
-  CRUD ships (v2 PBI).
-- **Custom domain** — stays on `*.vercel.app` until requested.
+- `GET /api/v1/keys` — list keys for the signed-in user
+- `POST /api/v1/keys` — `{ name, limit_usd? }` → returns full key once, persists
+  SHA-256 hash + prefix/suffix to MongoDB `api_keys`
+- `PATCH /api/v1/keys/:id` — `{ disabled?, name?, limit_usd? }`
+- `DELETE /api/v1/keys/:id`
+- `POST /api/billing/checkout` — `{ amount_usd }` → Stripe Checkout session URL
+  (returns 503 if `STRIPE_SECRET_KEY` is missing)
+- `POST /api/billing/webhook` — Stripe webhook (HMAC-verified, logs
+  `checkout.session.completed` events to MongoDB `credit_history`)
+
+## Active in v1.1
+
+- ✅ **GA4** active — measurement id `G-GTVT9WMTZW` synced to Vercel.
+- ✅ **Mongo-backed API keys** — `api_keys` collection; full key shown once on
+  creation, SHA-256 hash stored.
+- ✅ **Stripe checkout scaffold** — code path live; flips on the moment you set
+  `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`. Webhook endpoint:
+  `https://openrouterai.vercel.app/api/billing/webhook`.
+
+## Still owed
+
+- **Stripe activation** — add `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` in
+  Vercel and register the webhook URL above in the Stripe dashboard.
+- **Per-key spend tracking** — `spend_mtd_usd` increments are a v2 PBI (currently
+  fixed at 0 on every new key; chat-proxy doesn't yet attribute usage by key).
+- **Custom domain** — stays on `*.vercel.app` until you pick a domain. To wire
+  one: `vercel domains add <name>` then update `NEXT_PUBLIC_APP_URL`.
 
 ## License
 

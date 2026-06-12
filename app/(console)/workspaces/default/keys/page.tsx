@@ -1,36 +1,110 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Copy, Plus, Trash2, Power } from "lucide-react";
-import { SEED_KEYS, ApiKey, fmtMoney } from "@/lib/data";
+import { SEED_KEYS, type ApiKey, fmtMoney } from "@/lib/data";
+
+type LiveKey = {
+  id: string;
+  name: string;
+  prefix: string;
+  suffix: string;
+  created: string;
+  last_used: string;
+  limit_usd: number | null;
+  spend_mtd_usd: number;
+  disabled: boolean;
+};
+
+function liveToView(k: LiveKey): ApiKey {
+  return {
+    id: k.id,
+    name: k.name,
+    key: `${k.prefix}…${k.suffix}`,
+    created: k.created,
+    lastUsed: k.last_used,
+    limit: k.limit_usd,
+    spendMtd: k.spend_mtd_usd,
+    disabled: k.disabled,
+  };
+}
 
 export default function KeysPage() {
   const [keys, setKeys] = useState<ApiKey[]>(SEED_KEYS);
+  const [live, setLive] = useState(false);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [limit, setLimit] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const create = () => {
+  async function refresh() {
+    try {
+      const res = await fetch("/api/v1/keys");
+      if (res.ok) {
+        const json = (await res.json()) as { data: LiveKey[] };
+        setKeys((json.data ?? []).map(liveToView));
+        setLive(true);
+      }
+    } catch {
+      // soft-fail — keep seed
+    }
+  }
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  const create = async () => {
     if (!name.trim()) return;
-    const raw = `sk-or-v1-${Math.random().toString(16).slice(2, 10)}${Math.random().toString(16).slice(2, 10)}`;
-    setKeys([
-      {
-        id: `k${Date.now()}`,
-        name: name.trim(),
-        key: `${raw.slice(0, 13)}…${raw.slice(-4)}`,
-        created: "2026-06-12",
-        lastUsed: "—",
-        limit: limit ? Number(limit) : null,
-        spendMtd: 0,
-        disabled: false,
-      },
-      ...keys,
-    ]);
-    setNewKey(raw);
-    setName("");
-    setLimit("");
-    setCreating(false);
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/v1/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          limit_usd: limit ? Number(limit) : null,
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setError(j.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      const j = (await res.json()) as { key: string; record: LiveKey };
+      setNewKey(j.key);
+      setName("");
+      setLimit("");
+      setCreating(false);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggle = async (k: ApiKey) => {
+    if (!live) {
+      setKeys(keys.map((x) => (x.id === k.id ? { ...x, disabled: !x.disabled } : x)));
+      return;
+    }
+    const res = await fetch(`/api/v1/keys/${encodeURIComponent(k.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ disabled: !k.disabled }),
+    });
+    if (res.ok) await refresh();
+  };
+
+  const remove = async (k: ApiKey) => {
+    if (!live) {
+      setKeys(keys.filter((x) => x.id !== k.id));
+      return;
+    }
+    const res = await fetch(`/api/v1/keys/${encodeURIComponent(k.id)}`, { method: "DELETE" });
+    if (res.ok) await refresh();
   };
 
   return (
@@ -42,9 +116,17 @@ export default function KeysPage() {
         </button>
       </div>
       <p style={{ color: "var(--muted-foreground)", margin: "0 0 24px" }}>
-        Workspace <span className="font-mono" style={{ fontSize: 12 }}>default</span>. Keys inherit the workspace
-        provider policy; per-key limits cap monthly spend.
+        Workspace <span className="font-mono" style={{ fontSize: 12 }}>default</span>.{" "}
+        {live
+          ? "Keys stored in MongoDB; full key shown once on creation."
+          : "Showing seed data — Mongo unreachable."}
       </p>
+
+      {error && (
+        <div className="card" style={{ padding: 14, marginBottom: 16, borderColor: "var(--destructive)" }}>
+          <div className="font-mono" style={{ fontSize: 12, color: "var(--destructive)" }}>{error}</div>
+        </div>
+      )}
 
       {newKey && (
         <div className="card" style={{ padding: 18, marginBottom: 20, borderColor: "var(--primary)" }}>
@@ -74,7 +156,7 @@ export default function KeysPage() {
               <div className="label" style={{ marginBottom: 6 }}>Monthly limit ($)</div>
               <input className="input" placeholder="none" value={limit} onChange={(e) => setLimit(e.target.value.replace(/[^0-9.]/g, ""))} />
             </div>
-            <button className="btn-primary" onClick={create}>Create</button>
+            <button className="btn-primary" onClick={create} disabled={busy}>{busy ? "Creating…" : "Create"}</button>
             <button className="btn-secondary" onClick={() => setCreating(false)}>Cancel</button>
           </div>
         </div>
@@ -118,14 +200,14 @@ export default function KeysPage() {
             <span style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
               <button
                 title={k.disabled ? "Enable" : "Disable"}
-                onClick={() => setKeys(keys.map((x) => (x.id === k.id ? { ...x, disabled: !x.disabled } : x)))}
+                onClick={() => toggle(k)}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted-foreground)" }}
               >
                 <Power size={14} />
               </button>
               <button
                 title="Delete"
-                onClick={() => setKeys(keys.filter((x) => x.id !== k.id))}
+                onClick={() => remove(k)}
                 style={{ background: "none", border: "none", cursor: "pointer", color: "var(--destructive)" }}
               >
                 <Trash2 size={14} />
@@ -133,6 +215,11 @@ export default function KeysPage() {
             </span>
           </div>
         ))}
+        {keys.length === 0 && (
+          <div style={{ padding: 32, textAlign: "center", color: "var(--muted-foreground)", fontSize: 13 }}>
+            No keys yet. Click <strong>Create key</strong> to make one.
+          </div>
+        )}
       </div>
     </>
   );

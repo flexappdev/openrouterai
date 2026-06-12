@@ -6,7 +6,41 @@ import { CREDIT_HISTORY, fmtMoney } from "@/lib/data";
 export default function CreditsPage() {
   const [amount, setAmount] = useState("100");
   const [autoTopUp, setAutoTopUp] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fee = amount ? Number(amount) * 0.05 + 0.35 : 0;
+
+  const purchase = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount_usd: Number(amount) }),
+      });
+      if (res.ok) {
+        const { url } = (await res.json()) as { url: string };
+        window.location.assign(url);
+        return;
+      }
+      const j = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+      };
+      if (j.error === "stripe_unconfigured") {
+        setError(
+          "Stripe is not configured yet. Add STRIPE_SECRET_KEY in Vercel to enable purchases."
+        );
+      } else {
+        setError(j.message ?? j.error ?? `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <>
@@ -30,11 +64,18 @@ export default function CreditsPage() {
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ""))}
               style={{ width: 110 }}
             />
-            <button className="btn-primary">Purchase</button>
+            <button className="btn-primary" onClick={purchase} disabled={busy}>
+              {busy ? "Redirecting…" : "Purchase"}
+            </button>
           </div>
           <p className="font-mono" style={{ fontSize: 11, color: "var(--muted-foreground)", margin: "10px 0 0" }}>
             Fee: {fmtMoney(fee)} (5% + $0.35) · Total {fmtMoney(Number(amount || 0) + fee)}
           </p>
+          {error && (
+            <p style={{ fontSize: 12, color: "var(--destructive)", margin: "10px 0 0" }}>
+              {error}
+            </p>
+          )}
         </div>
       </div>
 
