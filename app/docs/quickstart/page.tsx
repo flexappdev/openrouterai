@@ -1,4 +1,4 @@
-const CURL = `curl https://openrouterai.dev/api/v1/chat/completions \\
+const CURL = `curl https://openrouterai.vercel.app/api/v1/chat/completions \\
   -H "Authorization: Bearer $OPENROUTERAI_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -11,7 +11,7 @@ const CURL = `curl https://openrouterai.dev/api/v1/chat/completions \\
 const TS = `import OpenAI from "openai";
 
 const client = new OpenAI({
-  baseURL: "https://openrouterai.dev/api/v1",
+  baseURL: "https://openrouterai.vercel.app/api/v1",
   apiKey: process.env.OPENROUTERAI_API_KEY,
 });
 
@@ -25,7 +25,7 @@ console.log(completion.choices[0].message.content);`;
 const PY = `from openai import OpenAI
 
 client = OpenAI(
-    base_url="https://openrouterai.dev/api/v1",
+    base_url="https://openrouterai.vercel.app/api/v1",
     api_key=os.environ["OPENROUTERAI_API_KEY"],
 )
 
@@ -73,6 +73,28 @@ export default function QuickstartPage() {
         Make your first request in under a minute. The API is OpenAI-compatible, so existing
         SDKs work by pointing them at a new base URL.
       </p>
+
+      <div
+        className="card"
+        style={{
+          padding: 16,
+          marginBottom: 28,
+          background: "var(--accent)",
+          borderColor: "var(--primary)",
+        }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontSize: 13,
+            color: "var(--accent-foreground)",
+            fontWeight: 500,
+          }}
+        >
+          These examples work right now — the proxy routes to OpenRouter using
+          our server-side <span className="font-mono">OPENROUTER_API_KEY</span>.
+        </p>
+      </div>
 
       <h2 style={{ fontSize: 18, margin: "0 0 8px" }}>1 · Create an API key</h2>
       <p style={{ fontSize: 14, color: "var(--muted-foreground)", margin: "0 0 20px" }}>
