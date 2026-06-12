@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createClient } from "@/lib/supabase/client";
 
 type User = { name: string; email: string; avatar: string } | null;
 
@@ -11,34 +12,71 @@ const AuthCtx = createContext<{
   ready: boolean;
 }>({ user: null, signIn: () => {}, signOut: () => {}, ready: false });
 
+function avatarOf(email: string) {
+  return (email[0] ?? "?").toUpperCase();
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem("orai-user");
-      if (raw) setUser(JSON.parse(raw));
-    } catch {}
-    setReady(true);
+    let mounted = true;
+    const supabase = createClient();
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      const u = data.session?.user;
+      if (u?.email) {
+        const name =
+          (u.user_metadata?.full_name as string | undefined) ??
+          u.email.split("@")[0];
+        setUser({ name, email: u.email, avatar: avatarOf(u.email) });
+      }
+      setReady(true);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const u = session?.user;
+      if (u?.email) {
+        const name =
+          (u.user_metadata?.full_name as string | undefined) ??
+          u.email.split("@")[0];
+        setUser({ name, email: u.email, avatar: avatarOf(u.email) });
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = () => {
-    const u = { name: "Mat", email: "mat@cleverfox.ai", avatar: "M" };
-    setUser(u);
-    try {
-      window.localStorage.setItem("orai-user", JSON.stringify(u));
-    } catch {}
+    if (typeof window === "undefined") return;
+    window.location.assign("/login");
   };
 
-  const signOut = () => {
+  const signOut = async () => {
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
     setUser(null);
-    try {
-      window.localStorage.removeItem("orai-user");
-    } catch {}
+    if (typeof window !== "undefined") {
+      window.location.assign("/");
+    }
   };
 
-  return <AuthCtx.Provider value={{ user, signIn, signOut, ready }}>{children}</AuthCtx.Provider>;
+  return (
+    <AuthCtx.Provider value={{ user, signIn, signOut, ready }}>
+      {children}
+    </AuthCtx.Provider>
+  );
 }
 
 export const useAuth = () => useContext(AuthCtx);
