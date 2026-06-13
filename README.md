@@ -54,6 +54,20 @@ Gated paths redirect signed-out users to `/login?next=<path>`. Sessions with
 an email other than `ADMIN_EMAIL` are signed out and bounced back to `/login`
 with `?error=not_allowlisted`.
 
+### Sign-in flows
+
+Two paths, both gated by the `ADMIN_EMAIL` allowlist at `/auth/callback`:
+
+1. **Magic link (primary)** — enter `mat@matsiems.com` on `/login`, click
+   *Send magic link*. Supabase emails a one-hour OTP link →
+   `/auth/callback?token_hash=…&type=magiclink` → `verifyOtp` →
+   allowlist check → redirect to `next`.
+2. **Google OAuth (secondary)** — *Continue with Google* button →
+   Supabase OAuth → `/auth/callback?code=…` → `exchangeCodeForSession` →
+   allowlist check → redirect to `next`.
+
+`shouldCreateUser: false` on the OTP call — never auto-creates accounts.
+
 ## API — chat completions
 
 OpenAI-compatible. Point any OpenAI SDK at `https://openrouterai.vercel.app/api/v1`:
