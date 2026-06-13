@@ -33,6 +33,9 @@ function LoginInner() {
   const next = params.get("next") ?? "/workspaces";
   const [pending, setPending] = useState(false);
   const [missingEnv, setMissingEnv] = useState(false);
+  const [email, setEmail] = useState("mat@matsiems.com");
+  const [linkSent, setLinkSent] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
 
   useEffect(() => {
     if (
@@ -52,6 +55,25 @@ function LoginInner() {
       provider: "google",
       options: { redirectTo },
     });
+  };
+
+  const sendMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (missingEnv) return;
+    setPending(true);
+    setLinkError(null);
+    const supabase = createClient();
+    const emailRedirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+    const { error: err } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo, shouldCreateUser: false },
+    });
+    setPending(false);
+    if (err) {
+      setLinkError(err.message);
+    } else {
+      setLinkSent(true);
+    }
   };
 
   return (
@@ -110,25 +132,103 @@ function LoginInner() {
           </div>
         )}
 
-        <button
-          onClick={signInWithGoogle}
-          disabled={pending || missingEnv}
-          className="btn-secondary"
-          style={{
-            width: "100%",
-            padding: "11px 16px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 10,
-            fontSize: 14,
-            fontWeight: 500,
-            opacity: pending || missingEnv ? 0.6 : 1,
-          }}
-        >
-          <GoogleMark />
-          {pending ? "Redirecting…" : "Continue with Google"}
-        </button>
+        {linkSent ? (
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 8,
+              background: "var(--accent)",
+              border: "1px solid var(--primary)",
+              fontSize: 13,
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 6 }}>Magic link sent</div>
+            <div style={{ color: "var(--muted-foreground)" }}>
+              Check <span className="font-mono">{email}</span> and click the link to sign in.
+              It expires in 1 hour.
+            </div>
+          </div>
+        ) : (
+          <>
+            <form onSubmit={sendMagicLink} style={{ marginBottom: 16 }}>
+              <label
+                className="label"
+                style={{ display: "block", marginBottom: 6 }}
+              >
+                Email
+              </label>
+              <input
+                className="input"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="mat@matsiems.com"
+                style={{ width: "100%", marginBottom: 10 }}
+              />
+              <button
+                type="submit"
+                disabled={pending || missingEnv}
+                className="btn-primary"
+                style={{
+                  width: "100%",
+                  padding: "11px 16px",
+                  fontSize: 14,
+                  fontWeight: 500,
+                  opacity: pending || missingEnv ? 0.6 : 1,
+                }}
+              >
+                {pending ? "Sending…" : "Send magic link"}
+              </button>
+              {linkError && (
+                <p
+                  style={{
+                    fontSize: 12,
+                    color: "var(--destructive)",
+                    marginTop: 8,
+                  }}
+                >
+                  {linkError}
+                </p>
+              )}
+            </form>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                margin: "16px 0",
+                color: "var(--muted-foreground)",
+                fontSize: 11,
+              }}
+            >
+              <span style={{ flex: 1, height: 1, background: "var(--border-subtle)" }} />
+              OR
+              <span style={{ flex: 1, height: 1, background: "var(--border-subtle)" }} />
+            </div>
+
+            <button
+              onClick={signInWithGoogle}
+              disabled={pending || missingEnv}
+              className="btn-secondary"
+              style={{
+                width: "100%",
+                padding: "11px 16px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+                fontSize: 14,
+                fontWeight: 500,
+                opacity: pending || missingEnv ? 0.6 : 1,
+              }}
+            >
+              <GoogleMark />
+              {pending ? "Redirecting…" : "Continue with Google"}
+            </button>
+          </>
+        )}
       </div>
     </main>
   );
